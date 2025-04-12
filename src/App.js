@@ -385,7 +385,7 @@ const App = () => {
                     const isDisabled = userPoints < reward.points;
                     
                     return (
-                      <div key={reward.id} className="flex-grow-1" style={{ maxWidth: 'calc(50% - 10px)' }}>
+                      <div key={reward.id} className="flex-grow-1" style={{ maxWidth: 'calc(100% - 10px)' }}>
                         <Card className={`h-100 ${!isDisabled ? 'border-success' : ''}`}>
                           <Card.Body className="text-center">
                             {/* Icon directly beside title in same line with better layout */}
