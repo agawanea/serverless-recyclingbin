@@ -379,7 +379,7 @@ const App = () => {
                 <div className="d-flex justify-content-between" style={{ gap: '15px' }}>
                   {[
                     { id: 'BIO-BAG', points: 300, title: 'Bio-degradabe bamboo Bag', icon: '🛍️ ' },
-                    { id: 'Dominos-50', points: 500, title: 'Dominos 50% Off', icon: '🍕 ' },
+                    { id: 'Dominos-50', points: 500, title: 'Dominos 50% Off coupon', icon: '🍕 ' },
                     { id: 'Tree', points: 1000, title: 'Plant a Tree', icon: '🌳 ' }
                   ].sort((a, b) => a.points - b.points).map(reward => {
                     const isDisabled = userPoints < reward.points;
