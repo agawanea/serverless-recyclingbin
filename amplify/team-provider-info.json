@@ -1,0 +1,24 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-recyclingapp-dev-4c56b-authRole",
+      "UnauthRoleArn": "arn:aws:iam::181660227495:role/amplify-recyclingapp-dev-4c56b-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::181660227495:role/amplify-recyclingapp-dev-4c56b-authRole",
+      "Region": "us-east-1",
+      "DeploymentBucketName": "amplify-recyclingapp-dev-4c56b-deployment",
+      "UnauthRoleName": "amplify-recyclingapp-dev-4c56b-unauthRole",
+      "StackName": "amplify-recyclingapp-dev-4c56b",
+      "StackId": "arn:aws:cloudformation:us-east-1:181660227495:stack/amplify-recyclingapp-dev-4c56b/050c20b0-fe7e-11ef-b132-0ea4c9222aa3",
+      "AmplifyAppId": "dbhwou1p7phu"
+    },
+    "categories": {
+      "auth": {
+        "recyclingapp5a08b6fb": {},
+        "userPoolGroups": {}
+      },
+      "storage": {
+        "recyclingimages": {}
+      }
+    }
+  }
+}

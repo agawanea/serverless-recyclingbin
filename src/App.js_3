@@ -1,0 +1,347 @@
+import React, { useState, useEffect } from 'react';
+import { Authenticator } from '@aws-amplify/ui-react';
+import { Amplify } from 'aws-amplify';
+import { uploadData } from '@aws-amplify/storage';
+import { fetchUserAttributes, fetchAuthSession } from '@aws-amplify/auth';
+import Webcam from 'react-webcam';
+import { Button, Container, Row, Col, Card, ListGroup, Badge } from 'react-bootstrap';
+import { Camera, Leaderboard, Redeem } from '@mui/icons-material';
+import config from './aws-exports';
+
+Amplify.configure(config);
+
+const API_ENDPOINT = 'https://axlnfr7ex4.execute-api.us-east-1.amazonaws.com/prod';
+
+const App = () => {
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [userPoints, setUserPoints] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+// Simply add this comment before the useEffect
+// eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    fetchLeaderboard();
+    fetchUserPoints();
+  }, []);
+
+  // Get auth token for API calls
+  const getAuthToken = async () => {
+    try {
+      const session = await fetchAuthSession();
+      return session.tokens.accessToken.toString();
+    } catch (error) {
+      console.error('Error getting auth token:', error);
+      return null;
+    }
+  };
+  
+  // Helper function to get username from token
+  const getUsernameFromToken = async () => {
+    try {
+      const session = await fetchAuthSession();
+      const token = session.tokens.accessToken.toString();
+      
+      // Parse the token (simple approach - in production use a proper JWT library)
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(window.atob(base64));
+      
+      console.log('Token payload:', payload);
+      return payload.username || payload.sub;
+    } catch (error) {
+      console.error('Error extracting username from token:', error);
+      return null;
+    }
+  };
+
+  const fetchLeaderboard = async () => {
+    setLoading(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) throw new Error('No auth token available');
+      
+      const response = await fetch(`${API_ENDPOINT}/leaderboard`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('Leaderboard data:', data);
+      setLeaderboard(Array.isArray(data) ? data : []);
+      setError(null);
+    } catch (error) {
+      console.error('Error fetching leaderboard:', error);
+      setLeaderboard([]);
+      setError('Failed to load leaderboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchUserPoints = async () => {
+    try {
+      const token = await getAuthToken();
+      if (!token) throw new Error('No auth token available');
+      
+      const userAttributes = await fetchUserAttributes();
+      console.log('User attributes from Cognito:', userAttributes);
+      
+      // First try to get username directly from the token
+      const username = await getUsernameFromToken();
+      console.log('Username from token:', username);
+      
+      if (!username) {
+        throw new Error('Could not determine username');
+      }
+      
+      const response = await fetch(`${API_ENDPOINT}/users/${username}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('User points data:', data);
+      
+      // Ensure points is treated as a number
+      const pointsValue = parseInt(data?.points || 0, 10);
+      console.log('Setting user points to:', pointsValue);
+      setUserPoints(pointsValue);
+    } catch (error) {
+      console.error('Error fetching points:', error);
+      setUserPoints(0);
+    }
+  };
+
+  const handleCapture = async (imageSrc) => {
+    try {
+      // Get username from token - most reliable source
+      const username = await getUsernameFromToken();
+      console.log('Username for S3 upload:', username);
+      
+      if (!username) {
+        throw new Error('Could not determine username for upload');
+      }
+      
+      // Convert base64 data URL to blob
+      const fetchResponse = await fetch(imageSrc);
+      const blob = await fetchResponse.blob();
+      
+      // Create S3 path with username and timestamp
+      const timestamp = Date.now();
+      const filePath = `uploads/${username}/${timestamp}.jpg`;
+      console.log('Uploading image to path:', filePath);
+      
+      await uploadData({
+        key: filePath,
+        data: blob,
+        options: {
+          contentType: 'image/jpeg'
+        }
+      });
+      
+      console.log('Image uploaded successfully');
+      setCameraOpen(false);
+      fetchUserPoints();
+    } catch (error) {
+      console.error('Upload failed:', error);
+      alert('Failed to upload image. Please try again.');
+    }
+  };
+
+  const handleRedeem = async (rewardId) => {
+    try {
+      const token = await getAuthToken();
+      if (!token) throw new Error('No auth token available');
+      
+      console.log(`Redeeming reward: ${rewardId}`);
+      
+      const response = await fetch(`${API_ENDPOINT}/redeem`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ rewardId })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+      
+      alert(`Successfully redeemed ${rewardId}!`);
+      fetchUserPoints();
+    } catch (error) {
+      console.error('Redemption failed:', error);
+      alert('Failed to redeem reward. Please try again.');
+    }
+  };
+
+  return (
+    <Authenticator>
+      {({ signOut }) => (
+        <Container className="mt-4">
+          <Row className="mb-4">
+            <Col>
+              <h2>♻️ EcoRewards</h2>
+              <div className="float-end">
+                <Badge bg="success" className="me-3" style={{ fontSize: '1.2rem', padding: '8px 16px' }}>
+                  Points: {userPoints}
+                </Badge>
+                <Button variant="outline-danger" onClick={signOut}>Sign Out</Button>
+              </div>
+            </Col>
+          </Row>
+
+          <Row className="mb-4">
+            <Col md={8}>
+              <Card>
+                <Card.Body>
+                  <Button 
+                    variant="primary" 
+                    onClick={() => setCameraOpen(!cameraOpen)}
+                    size="lg"
+                  >
+                    <Camera className="me-2" />
+                    {cameraOpen ? 'Close Camera' : 'Recycle Now'}
+                  </Button>
+
+                  {cameraOpen && (
+                    <div className="mt-3">
+                      <Webcam
+                        audio={false}
+                        screenshotFormat="image/jpeg"
+                        className="w-100"
+                        style={{ maxHeight: '400px' }}
+                      >
+                        {({ getScreenshot }) => (
+                          <div className="text-center mt-2">
+                            <Button
+                              variant="success"
+                              size="lg"
+                              onClick={() => handleCapture(getScreenshot())}
+                            >
+                              Capture & Submit
+                            </Button>
+                          </div>
+                        )}
+                      </Webcam>
+                    </div>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+
+            <Col md={4}>
+              <Card>
+                <Card.Header className="bg-primary text-white">
+                  <Leaderboard className="me-2" />
+                  Leaderboard
+                </Card.Header>
+                <ListGroup variant="flush">
+                  {loading ? (
+                    <ListGroup.Item>Loading leaderboard data...</ListGroup.Item>
+                  ) : error ? (
+                    <ListGroup.Item className="text-danger">{error}</ListGroup.Item>
+                  ) : Array.isArray(leaderboard) && leaderboard.length > 0 ? (
+                    leaderboard.map((entry, index) => {
+                      // Try to extract user ID from path if it looks like a directory
+                      let displayName = entry.userId;
+                      
+                      // Skip common prefixes that aren't real user IDs
+                      if (displayName === 'public' || displayName === 'uploads') {
+                        displayName = `Unknown User ${index + 1}`;
+                      }
+                      
+                      // Extract user ID from paths like "uploads/user-id/file.jpg"
+                      if (displayName && displayName.includes('/')) {
+                        const parts = displayName.split('/');
+                        if (parts.length > 1 && parts[1] && parts[1] !== '') {
+                          displayName = parts[1]; // Use the actual user ID part
+                        }
+                      }
+                      
+                      return (
+                        <ListGroup.Item key={entry.userId || index} className="d-flex justify-content-between align-items-center">
+                          <span>
+                            <strong>#{index + 1}</strong> {displayName}
+                          </span>
+                          <Badge bg="primary" pill>
+                            {entry.points} pts
+                          </Badge>
+                        </ListGroup.Item>
+                      );
+                    })
+                  ) : (
+                    <ListGroup.Item>No leaderboard data available</ListGroup.Item>
+                  )}
+                </ListGroup>
+              </Card>
+            </Col>
+          </Row>
+
+          <Row>
+            <Col>
+              <Card>
+                <Card.Header className="bg-warning text-dark">
+                  <Redeem className="me-2" />
+                  Redeem Rewards
+                </Card.Header>
+                <Card.Body>
+                  <div className="d-flex flex-wrap gap-4 justify-content-center">
+                    {[
+                      { id: 'OATLY-50', points: 500, title: 'Oatly 50% Off' },
+                      { id: 'BIO-BAG', points: 300, title: 'Reusable Bag' },
+                      { id: 'TREE', points: 1000, title: 'Plant a Tree' }
+                    ].map(reward => {
+                      const isDisabled = userPoints < reward.points;
+                      console.log(`Reward ${reward.id}: User has ${userPoints} points, needed ${reward.points}, disabled: ${isDisabled}`);
+                      
+                      return (
+                        <Card key={reward.id} style={{ width: '18rem', minHeight: '180px' }}>
+                          <Card.Body className="d-flex flex-column justify-content-between">
+                            <div>
+                              <Card.Title>{reward.title}</Card.Title>
+                              <Card.Text className="text-center fw-bold">
+                                {reward.points} points
+                              </Card.Text>
+                            </div>
+                            <Button 
+                              variant={isDisabled ? "secondary" : "warning"} 
+                              disabled={isDisabled}
+                              onClick={() => handleRedeem(reward.id)}
+                              className="w-100 mt-3"
+                            >
+                              {isDisabled ? `Need ${reward.points - userPoints} More Points` : 'Redeem Now'}
+                            </Button>
+                          </Card.Body>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+          
+          <footer className="text-center mt-4 py-3">
+            <small className="text-muted">EcoRewards &copy; 2023 - Recycle, Earn, Redeem</small>
+          </footer>
+        </Container>
+      )}
+    </Authenticator>
+  );
+};
+
+export default App;

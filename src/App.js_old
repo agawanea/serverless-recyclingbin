@@ -1,0 +1,211 @@
+import React, { useState, useEffect } from 'react';
+import { Authenticator } from '@aws-amplify/ui-react';
+import { Amplify } from 'aws-amplify';
+import { uploadData } from '@aws-amplify/storage';
+import { get, post } from '@aws-amplify/api';
+import { fetchUserAttributes } from '@aws-amplify/auth';
+import Webcam from 'react-webcam';
+import { Button, Container, Row, Col, Card, ListGroup, Badge } from 'react-bootstrap';
+import { Camera, Leaderboard, Redeem } from '@mui/icons-material';
+import config from './aws-exports';
+
+Amplify.configure(config);
+
+const App = () => {
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [userPoints, setUserPoints] = useState(0);
+
+  useEffect(() => {
+    fetchLeaderboard();
+    fetchUserPoints();
+  }, []);
+
+  // const fetchLeaderboard = async () => {
+  //   try {
+  //     const { body } = await get({
+  //       apiName: 'RecyclingAPI',
+  //       path: '/leaderboard'
+  //     });
+
+  //     console.log(body)
+  //     const data = await body.json();
+  //     setLeaderboard(data);
+  //   } catch (error) {
+  //     console.error('Error fetching leaderboard:', error);
+  //   }
+  // };
+
+  const fetchLeaderboard = async () => {
+    try {
+      // For Amplify v6+, use the REST.<ApiName> format
+      const data = await get({
+        apiName: 'REST.RecyclingAPI', // Note the "REST." prefix
+        path: '/leaderboard'
+      });
+      
+      console.log('Leaderboard data:', data);
+      
+      // Make sure we have an array before setting state
+      if (Array.isArray(data)) {
+        setLeaderboard(data);
+      } else {
+        console.warn('Expected array but got:', data);
+        setLeaderboard([]);
+      }
+    } catch (error) {
+      console.error('Error fetching leaderboard:', error);
+      setLeaderboard([]);
+    }
+  };
+
+  const fetchUserPoints = async () => {
+    try {
+      const user = await fetchUserAttributes();
+      const { body } = await get({
+        apiName: 'RecyclingAPI',
+        path: `/users/${user.sub}`
+      });
+      const data = await body.json();
+      setUserPoints(data.points);
+    } catch (error) {
+      console.error('Error fetching points:', error);
+    }
+  };
+
+  const handleCapture = async (imageSrc) => {
+    try {
+      await uploadData({
+        key: `uploads/\${user.sub}/\${Date.now()}.jpg`,
+        data: imageSrc,
+        options: {
+          contentType: 'image/jpeg'
+        }
+      });
+      setCameraOpen(false);
+      fetchUserPoints();
+    } catch (error) {
+      console.error('Upload failed:', error);
+    }
+  };
+
+  const handleRedeem = async (rewardId) => {
+    try {
+      await post({
+        apiName: 'RecyclingAPI',
+        path: '/redeem',
+        options: {
+          body: { rewardId }
+        }
+      });
+      fetchUserPoints();
+    } catch (error) {
+      console.error('Redemption failed:', error);
+    }
+  };
+
+  return (
+    <Authenticator>
+      {({ signOut }) => (
+        <Container className="mt-4">
+          <Row className="mb-4">
+            <Col>
+              <h2>♻️ EcoRewards</h2>
+              <div className="float-end">
+                <Badge bg="success" className="me-3">Points: {userPoints}</Badge>
+                <Button variant="outline-danger" onClick={signOut}>Sign Out</Button>
+              </div>
+            </Col>
+          </Row>
+
+          <Row className="mb-4">
+            <Col md={8}>
+              <Card>
+                <Card.Body>
+                  <Button 
+                    variant="primary" 
+                    onClick={() => setCameraOpen(!cameraOpen)}
+                  >
+                    <Camera className="me-2" />
+                    {cameraOpen ? 'Close Camera' : 'Recycle Now'}
+                  </Button>
+
+                  {cameraOpen && (
+                    <div className="mt-3">
+                      <Webcam
+                        audio={false}
+                        screenshotFormat="image/jpeg"
+                        className="w-100"
+                      >
+                        {({ getScreenshot }) => (
+                          <Button
+                            variant="success"
+                            onClick={() => handleCapture(getScreenshot())}
+                          >
+                            Capture & Submit
+                          </Button>
+                        )}
+                      </Webcam>
+                    </div>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+
+            <Col md={4}>
+              <Card>
+                <Card.Header>
+                  <Leaderboard className="me-2" />
+                  Leaderboard
+                </Card.Header>
+                <ListGroup variant="flush">
+                  {leaderboard.map((entry, index) => (
+                    <ListGroup.Item key={entry.userId}>
+                      #{index + 1} {entry.userId} - {entry.points} pts
+                    </ListGroup.Item>
+                  ))}
+                </ListGroup>
+              </Card>
+            </Col>
+          </Row>
+
+          <Row>
+            <Col>
+              <Card>
+                <Card.Header>
+                  <Redeem className="me-2" />
+                  Redeem Rewards
+                </Card.Header>
+                <Card.Body>
+                  <div className="d-flex gap-3">
+                    {[
+                      { id: 'OATLY-50', points: 500, title: 'Oatly 50% Off' },
+                      { id: 'BIO-BAG', points: 300, title: 'Reusable Bag' },
+                      { id: 'TREE', points: 1000, title: 'Plant a Tree' }
+                    ].map(reward => (
+                      <Card key={reward.id}>
+                        <Card.Body>
+                          <Card.Title>{reward.title}</Card.Title>
+                          <Card.Text>{reward.points} points</Card.Text>
+                          <Button 
+                            variant="warning" 
+                            disabled={userPoints < reward.points}
+                            onClick={() => handleRedeem(reward.id)}
+                          >
+                            Redeem
+                          </Button>
+                        </Card.Body>
+                      </Card>
+                    ))}
+                  </div>
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+        </Container>
+      )}
+    </Authenticator>
+  );
+};
+
+export default App;

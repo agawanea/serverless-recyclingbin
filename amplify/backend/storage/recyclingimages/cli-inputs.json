@@ -1,0 +1,14 @@
+{
+  "resourceName": "recyclingimages",
+  "policyUUID": "546b3fd1",
+  "bucketName": "recycling-app-images-agawanea",
+  "storageAccess": "auth",
+  "guestAccess": [],
+  "authAccess": [
+    "CREATE_AND_UPDATE",
+    "READ",
+    "DELETE"
+  ],
+  "triggerFunction": "NONE",
+  "groupAccess": {}
+}
